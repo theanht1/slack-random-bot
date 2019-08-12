@@ -1,6 +1,7 @@
 use actix_web::{App, web, get, post, HttpResponse, HttpServer, Responder};
 use listenfd::ListenFd;
 use serde::{Deserialize, Serialize};
+use std::env;
 
 mod errors;
 mod random;
@@ -72,10 +73,15 @@ fn main() {
             .service(random_number)
             .service(random_choice)
     });
+    let port = env::var("PORT")
+       .unwrap_or_else(|_| "3737".to_string())
+       .parse()
+       .expect("PORT must be a number");
+
     server = if let Some(l) = listenfd.take_tcp_listener(0).unwrap() {
         server.listen(l).unwrap()
     } else {
-        server.bind("127.0.0.1:3737").unwrap()
+        server.bind(("0.0.0.0", port)).expect("Can not bind to port")
     };
 
     server.run().unwrap();
