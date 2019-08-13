@@ -1,5 +1,6 @@
 use actix_web::{App, web, get, post, HttpResponse, HttpServer, Responder};
 use listenfd::ListenFd;
+use reqwest;
 use serde::{Deserialize, Serialize};
 use std::env;
 
@@ -11,8 +12,33 @@ fn index() -> impl Responder {
     HttpResponse::Ok().body("Hello, world!")
 }
 
-#[derive(Deserialize)]
-#[derive(Debug)]
+#[derive(Deserialize, Debug)]
+struct AuthRequest {
+    code: String,
+}
+
+#[get("/slack/auth_redirect")]
+fn slack_auth_redirect(query: web::Query<AuthRequest>) ->  impl Responder {
+    let client_id = env::var("CLIENT_ID").unwrap();
+    let client_secret = env::var("CLIENT_SECRET").unwrap();
+    let url = format!("https://slack.com/api/oauth.access?code={}&client_id={}&client_secret={}",
+                      query.code, client_id, client_secret);
+
+    let mut res = reqwest::get(&url[..]);
+    let response = match res {
+        Ok(r) => {
+            println!("Auth successfully");
+            "Random app has been installed in your workspace. Thank you!"
+        },
+        Err(e) => {
+            println!("Error: {:?}", e);
+            "Something wrong. Please try again!"
+        },
+    };
+    HttpResponse::Ok().body(response)
+}
+
+#[derive(Deserialize, Debug)]
 struct SlackFormData {
     token: String,
     team_id: String,
@@ -32,7 +58,6 @@ struct SlackMessageReponse {
     response_type: String,
     text: String,
 }
-
 
 #[post("/api/rand")]
 fn random_number(data: web::Form<SlackFormData>) -> Result<HttpResponse, errors::UserError> {
@@ -70,6 +95,7 @@ fn main() {
     let mut server = HttpServer::new(|| {
         App::new()
             .service(index)
+            .service(slack_auth_redirect)
             .service(random_number)
             .service(random_choice)
     });

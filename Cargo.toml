@@ -12,3 +12,5 @@ listenfd = "0.3"
 rand = "0.7.0"
 serde = "1.0.98"
 failure = "0.1.5"
+reqwest = "=0.9.17"
+
