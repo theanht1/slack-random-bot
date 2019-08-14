@@ -4,8 +4,9 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use std::env;
 
-mod errors;
-mod random;
+pub mod errors;
+pub mod random;
+pub mod commands;
 
 #[get("/")]
 fn index() -> impl Responder {
@@ -60,33 +61,27 @@ struct SlackMessageReponse {
 }
 
 #[post("/api/rand")]
-fn random_number(data: web::Form<SlackFormData>) -> Result<HttpResponse, errors::UserError> {
-    let numbers: Vec<&str> = data.text.split(' ').collect();
-    let (low, high): (i64, i64) =
-        if numbers.len() < 2 {
-            (0, 10)
-        } else {
-            (numbers[0].parse().map_err(|_e| errors::UserError::InputError)?,
-             numbers[1].parse().map_err(|_e| errors::UserError::InputError)?)
-        };
-
-    let rand_number = random::gen_random_range(low, high + 1)
-        .map_err(|_e| errors::UserError::InputError)?;
-    Ok(HttpResponse::Ok().json(SlackMessageReponse {
-        response_type: String::from("in_channel"),
-        text: format!("*{}*", rand_number),
-    }))
-}
-
-#[post("/api/rand_choice")]
-fn random_choice(data: web::Form<SlackFormData>) -> Result<HttpResponse, errors::UserError> {
+fn rand(data: web::Form<SlackFormData>) -> Result<HttpResponse, errors::UserError> {
     let options: Vec<String> = data.text.split_whitespace().map(String::from).collect();
-    let rand_choice = random::select_random(&options)
-        .map_err(|_e| errors::UserError::InputError)?;
 
+    let mut cmd: &str;
+    let mut opts: Vec<String> = [].to_vec(); //vec!([]);
+    if options.len() == 0 {
+        cmd = commands::Command::Help.as_str();
+    } else {
+        cmd = options[0].as_str();
+        opts = options[1..].to_vec();
+    }
+    let cmd = match cmd {
+        "help" => commands::Command::Help,
+        "num" => commands::Command::Number,
+        "choice" => commands::Command::Choice,
+        _ => commands::Command::Help,
+    };
+    let response = cmd.handle(&opts).map_err(|_e| errors::UserError::InputError)?;
     Ok(HttpResponse::Ok().json(SlackMessageReponse {
         response_type: String::from("in_channel"),
-        text: format!("*{}*", rand_choice),
+        text: format!("{}", response),
     }))
 }
 
@@ -96,8 +91,7 @@ fn main() {
         App::new()
             .service(index)
             .service(slack_auth_redirect)
-            .service(random_number)
-            .service(random_choice)
+            .service(rand)
     });
     let port = env::var("PORT")
        .unwrap_or_else(|_| "3737".to_string())
